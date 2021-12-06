@@ -79,7 +79,7 @@ class _ForwardProjection(torch.autograd.Function):
             return projection,
 
     @staticmethod
-    def backward(self, projection_grad, state=None, *args):
+    def backward(self, projection_grad, state=None, volume_grad=None, *args):
         if state is None:
             state = self.state
             return_none = True
@@ -87,9 +87,14 @@ class _ForwardProjection(torch.autograd.Function):
             return_none = False
 
         projection_grad = projection_grad.float().cuda().contiguous()
-        volume_grad = torch.zeros(state.volume_shape,
-                                  device='cuda',
-                                  requires_grad=projection_grad.requires_grad)
+        if volume_grad is None:
+            volume_grad = torch.zeros(state.volume_shape,
+                                      device='cuda',
+                                      requires_grad=projection_grad.requires_grad)
+        else:
+            assert list(volume_grad.shape) == state.volume_shape, 'Provided out volume does not have the correct shape.'
+            assert volume_grad.is_cuda, 'Provided out volume must be on GPU.'
+            volume_grad.requires_grad = projection_grad.requires_grad
 
         assert pyronn_torch.cpp_extension
         pyronn_torch.cpp_extension.call_Cone_Backprojection3D_Kernel_Launcher(
@@ -185,7 +190,8 @@ class ConeBeamProjector:
     def project_backward(self,
                          projection_stack,
                          step_size=1.,
-                         use_texture=True):
+                         use_texture=True,
+                         out=None):
         return _BackwardProjection.apply(
             projection_stack,
             State(projection_shape=self._projection_shape,
@@ -197,7 +203,8 @@ class ConeBeamProjector:
                   volume_spacing=self._volume_spacing,
                   projection_multiplier=self._projection_multiplier,
                   step_size=step_size,
-                  with_texture=use_texture))[0]
+                  with_texture=use_texture),
+            out)[0]
 
     def _calc_inverse_matrices(self):
         if self._projection_matrices_numpy is None:

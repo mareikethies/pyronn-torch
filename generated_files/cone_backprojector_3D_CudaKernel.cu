@@ -130,7 +130,7 @@ __global__ void backproject_3Dcone_beam_kernel(
 
   // linear volume address
   const unsigned int l = volume_size.x * (k * volume_size.y + j) + i;
-  vol[l] = (val * projection_multiplier);
+  vol[l] += (val * projection_multiplier);
 }
 
 void Cone_Backprojection3D_Kernel_Launcher(
